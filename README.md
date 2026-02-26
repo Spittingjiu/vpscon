@@ -22,8 +22,8 @@ npm start
 参考：`RELEASE.md`
 
 ## 教程
-- 标准教程：`TUTORIAL_ZH.md`
-- 傻瓜式教程：`TUTORIAL_ZH_DUMMY.md`
+- 标准教程：[TUTORIAL_ZH.md](./TUTORIAL_ZH.md)
+- 傻瓜式教程：[TUTORIAL_ZH_DUMMY.md](./TUTORIAL_ZH_DUMMY.md)
 
 ## 可选环境变量（不配也能用）
 - `PORT`：服务端口（默认 `8787`）
