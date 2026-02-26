@@ -82,7 +82,7 @@ WantedBy=multi-user.target
 SYSTEMD
 systemctl daemon-reload
 systemctl enable --now vpscon.service
-ufw allow 8787/tcp || true
+ufw allow 3338/tcp || true
 ufw reload || true
 systemctl status vpscon.service --no-pager
 ```
@@ -104,13 +104,13 @@ systemctl status vpscon.service --no-pager
 在你电脑浏览器输入：
 
 ```text
-http://你的服务器IP:8787
+http://你的服务器IP:3338
 ```
 
 例子：
 
 ```text
-http://1.2.3.4:8787
+http://1.2.3.4:3338
 ```
 
 看到 glvps 页面 = 完成。

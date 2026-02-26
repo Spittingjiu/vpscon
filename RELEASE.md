@@ -9,7 +9,7 @@ npm install
 npm start
 ```
 
-默认监听：`http://127.0.0.1:8787`
+默认监听：`http://127.0.0.1:3338`
 
 ## 生产部署（systemd 示例）
 

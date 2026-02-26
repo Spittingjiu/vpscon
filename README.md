@@ -25,7 +25,7 @@ npm install
 npm start
 ```
 
-默认监听：`http://127.0.0.1:8787`
+默认监听：`http://127.0.0.1:3338`
 
 ## 部署
 
@@ -35,7 +35,7 @@ npm start
 ### Docker（一条命令）
 ```bash
 docker run -d --name vpscon \
-  -p 8787:8787 \
+  -p 3338:3338 \
   -v /opt/vpscon-data:/app/data \
   -v /opt/vpscon-app:/app \
   -w /app \
@@ -54,7 +54,7 @@ docker run -d --name vpscon \
 - 开启后：登录/注册都会要求验证码（用于降低机器注册与暴力尝试风险）
 
 ## 可选环境变量（不配也能用）
-- `PORT`：服务端口（默认 `8787`）
+- `PORT`：服务端口（默认 `3338`）
 - `BITSFLOW_BASE`：覆盖 BitsFlow API 基地址（默认内置值）
 - `NOSLA_BASE`：覆盖 Nosla API 基地址（默认内置值）
 - `TOKEN_ENC_KEY`：Token 加密密钥（建议生产环境配置）
