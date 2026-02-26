@@ -1,6 +1,15 @@
-# BitsFlow VPS Manager (glvps)
+# BitsFlow VPS Manager
 
-后端代理模式 VPS 管理页（避免前端直连 API 被 Cloudflare challenge 拦截）。
+一个面向多站点云主机的 Web 控制台项目，目标是把日常 VPS 管理操作集中到一个简洁页面里完成。
+
+这个项目采用**后端代理模式**对接 BitsFlow / Nosla API，避免浏览器前端直连时被 Cloudflare challenge 或跨域策略拦截，提升可用性与稳定性。
+
+## 项目简介
+- 支持多账号 Token 管理与隔离（按 provider + token 组织）
+- 支持服务器列表聚合展示（BitsFlow / Nosla 同屏查看）
+- 提供常用运维动作：开关机、重启、救援模式、密码重置
+- 提供进阶能力：系统重装、模板加载、VNC、ISO、任务、SSH Key 管理
+- 内置用户登录、会话、CSRF 与可选验证码配置，适合直接部署到生产环境
 
 ## 内置默认 API（已预填，无需手动配置）
 - BitsFlow：`https://scp-hk.bitsflow.cloud/api`
