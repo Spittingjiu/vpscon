@@ -48,6 +48,11 @@ docker run -d --name vpscon \
 - 标准教程：[TUTORIAL_ZH.md](./TUTORIAL_ZH.md)
 - 傻瓜式教程：[TUTORIAL_ZH_DUMMY.md](./TUTORIAL_ZH_DUMMY.md)
 
+## 权限与安全设置
+- 普通用户：可登录、管理自己的 Token、操作服务器
+- `admin` 用户：在页面右上角会显示“安全设置”入口，可开启/关闭 Cloudflare Turnstile 验证
+- 开启后：登录/注册都会要求验证码（用于降低机器注册与暴力尝试风险）
+
 ## 可选环境变量（不配也能用）
 - `PORT`：服务端口（默认 `8787`）
 - `BITSFLOW_BASE`：覆盖 BitsFlow API 基地址（默认内置值）
