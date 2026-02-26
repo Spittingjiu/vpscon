@@ -18,8 +18,22 @@ npm start
 
 默认监听：`http://127.0.0.1:8787`
 
-## 生产部署（systemd）
+## 部署
+
+### systemd（推荐）
 参考：`RELEASE.md`
+
+### Docker（一条命令）
+```bash
+docker run -d --name vpscon \
+  -p 8787:8787 \
+  -v /opt/vpscon-data:/app/data \
+  -v /opt/vpscon-app:/app \
+  -w /app \
+  --restart unless-stopped \
+  node:20-bookworm \
+  bash -lc "if [ ! -f package.json ]; then git clone https://github.com/Spittingjiu/vpscon.git /app; fi && npm install --omit=dev && node server.mjs"
+```
 
 ## 教程
 - 标准教程：[TUTORIAL_ZH.md](./TUTORIAL_ZH.md)
