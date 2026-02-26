@@ -1,0 +1,5 @@
+{
+  "captchaEnabled": false,
+  "turnstileSiteKey": "",
+  "turnstileSecret": ""
+}

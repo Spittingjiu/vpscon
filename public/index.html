@@ -1,0 +1,656 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BitsFlow VPS 控制台</title>
+  <style>
+    :root{--bg:#0b1020;--card:#111936;--line:#29345f;--txt:#e8ecff;--sub:#a9b4da;--pri:#6ea8ff;--ok:#35d07f;--bad:#ff6b6b;--warn:#f0b429}
+    *{box-sizing:border-box}body{margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial;background:linear-gradient(135deg,#090f1e,#141d3d);color:var(--txt)}
+    .wrap{max-width:1250px;margin:20px auto;padding:0 14px}.card{background:rgba(17,25,54,.92);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px}
+    .row{display:grid;gap:10px}.r2{grid-template-columns:1fr 1fr}.r3{grid-template-columns:1fr 1fr 1fr}.r4{grid-template-columns:1fr 1fr 1fr 1fr}
+    input,select,button,textarea{width:100%;background:#0f1733;color:var(--txt);border:1px solid var(--line);border-radius:10px;padding:10px}
+    button{cursor:pointer;background:linear-gradient(180deg,#2d4ea8,#223c81);border:none}.ok{background:linear-gradient(180deg,#2fa66b,#238755)}.bad{background:linear-gradient(180deg,#d05b5b,#ad3d3d)}.warn{background:linear-gradient(180deg,#c99b2f,#9d7620)}
+    .tabs{display:none;flex-wrap:wrap;gap:8px}.tab{padding:8px 12px;border:1px solid var(--line);border-radius:999px;cursor:pointer;color:var(--sub)}.tab.active{background:#243f86;color:#fff;border-color:#3f62c0}
+    .panel{display:none}.panel.active{display:block}
+/* 非主页面板改为后台逻辑层，不再直接展示，避免与弹窗重复 */
+#p-system,#p-vnc,#p-iso,#p-tasks,#p-ssh{display:none !important;}
+    .list{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.item{background:#0e1734;border:1px solid var(--line);border-radius:10px;padding:10px;cursor:pointer}.item.active{outline:2px solid var(--pri)}
+    .muted{font-size:12px;color:var(--sub)} .title{font-weight:700} h1,h2,h3{margin:0 0 8px}
+    .pill{display:inline-block;padding:2px 8px;border-radius:999px;background:#1e2f61;font-size:12px}
+    table{width:100%;border-collapse:collapse}th,td{border-bottom:1px solid #243056;padding:8px;text-align:left;font-size:13px}
+    .toast{position:fixed;right:16px;bottom:16px;background:#13204a;border:1px solid #2f4ea1;padding:10px 12px;border-radius:10px;max-width:450px;z-index:9}
+    .oktxt{color:#87efb8}.errtxt{color:#ff9b9b}
+    .auth-mini{display:flex;gap:8px;align-items:center;justify-content:flex-end;flex-wrap:nowrap;white-space:nowrap}
+    .auth-chip{padding:4px 10px;border:1px solid var(--line);border-radius:999px;background:#111d44;color:#c7d5ff;font-size:12px}
+    .linkbtn{width:auto !important;background:none;border:none;color:#9dc0ff;text-decoration:none;cursor:pointer;padding:4px 8px;border-radius:8px}
+    .linkbtn:hover{background:#182654}
+    .modal{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;z-index:20}
+    .modal.show{display:flex}
+    .modal-card{width:min(420px,92vw);background:#101936;border:1px solid var(--line);border-radius:12px;padding:14px}
+    .token-dropdown>summary{cursor:pointer;color:var(--sub);font-size:12px;list-style:none}
+    .token-dropdown>summary::-webkit-details-marker{display:none}
+    #mainCard{min-height:230px}
+    #servers{min-height:140px}
+    .cat-power{background:linear-gradient(180deg,#b44747,#8f3131)!important}
+    .cat-system{background:linear-gradient(180deg,#3f5fd1,#2d46a7)!important}
+    .cat-vnc{background:linear-gradient(180deg,#4e5fb5,#3a4690)!important}
+    .cat-iso{background:linear-gradient(180deg,#2f8f86,#236d66)!important}
+    .cat-task{background:linear-gradient(180deg,#7a57c9,#5d3ea0)!important}
+    .cat-ssh{background:linear-gradient(180deg,#2f7db4,#245f8a)!important}
+    .cat-rename{background:linear-gradient(180deg,#c58b2d,#9c6f22)!important}
+    @media (max-width:980px){.r2,.r3,.r4,.list{grid-template-columns:1fr}.auth-mini{justify-content:flex-start;flex-wrap:wrap}}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card" id="mainCard">
+    <div style="display:flex;justify-content:space-between;gap:14px;align-items:flex-start;flex-wrap:wrap">
+      <div>
+        <h1>多站点 VPS 控制台</h1>
+        <div class="muted">支持 BitsFlow / Nosla，按站点隔离 Token 与服务器列表</div>
+      </div>
+      <div style="background:#0f1733;border:1px solid var(--line);border-radius:12px;padding:8px 10px">
+        <div class="auth-mini">
+          <span id="authState" class="auth-chip">未登录</span>
+          <button id="openLogin" class="linkbtn">登录</button>
+          <button id="openRegister" class="linkbtn">注册</button>
+          <button id="openAdmin" class="linkbtn" style="display:none">安全设置</button>
+          <button id="logoutBtn" class="linkbtn" style="display:none">退出</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="row r4" style="margin-top:10px">
+      <select id="provider">
+        <option value="bitsflow">BitsFlow (scp-hk.bitsflow.cloud)</option>
+        <option value="nosla">Nosla (scp.nosla.cloud)</option>
+      </select>
+      <input id="token" type="password" autocomplete="off" placeholder="Bearer Token（可直接粘贴 token 或 Bearer xxx）">
+      <button id="saveToken" style="display:none">保存 Token</button>
+      <button id="connect" class="ok" style="display:none">连接并自动加载</button>
+    </div>
+
+    <div id="tokenImportCard" class="card" style="display:none;margin-top:10px;background:#0e1734;padding:8px">
+      <details id="tokenDetails" class="token-dropdown">
+        <summary>Token 列表（点击展开）</summary>
+        <div id="tokenStatusList" class="row r3" style="margin-top:6px"></div>
+        <div style="margin-top:6px;text-align:right">
+          <button id="clearAllTokens" class="bad" style="width:auto;padding:6px 10px;border-radius:8px;font-size:12px">清空</button>
+        </div>
+      </details>
+    </div>
+
+  </div>
+
+  <div class="card">
+    <div class="tabs" id="tabs">
+      <div class="tab active" data-panel="p-servers">服务器</div>
+      <div class="tab" data-panel="p-power">电源/状态</div>
+      <div class="tab" data-panel="p-system">系统重装/设置</div>
+      <div class="tab" data-panel="p-vnc">VNC</div>
+      <div class="tab" data-panel="p-iso">ISO</div>
+      <div class="tab" data-panel="p-tasks">任务</div>
+      <div class="tab" data-panel="p-ssh">SSH Keys</div>
+    </div>
+
+    <div id="p-servers" class="panel active" style="margin-top:10px">
+
+      <div id="selectedHint" class="muted" style="margin-top:8px">未选中服务器（系统会自动选中第一台）</div>
+      <div id="servers" class="list" style="margin-top:10px"></div>
+
+      <h3 style="margin-top:12px">操作</h3>
+      <div class="row r4" style="margin-top:8px">
+        <button id="openPowerActions" class="cat-power">电源</button>
+        <button id="openSystemActions" class="cat-system">系统重装/设置</button>
+        <button id="openVncActions" class="cat-vnc">VNC</button>
+        <button id="openIsoActions" class="cat-iso">ISO</button>
+      </div>
+      <div class="row r3" style="margin-top:8px">
+        <button id="openTaskActions" class="cat-task">任务</button>
+        <button id="openSshActions" class="cat-ssh">SSH Keys</button>
+        <button id="openRenameActions" class="cat-rename">改名</button>
+      </div>
+
+      <div id="renameRow" class="row r2" style="margin-top:10px;display:none">
+        <input id="newName" placeholder="新服务器名称">
+        <button id="renameServer">修改名称</button>
+      </div>
+    </div>
+
+    <div id="p-power" class="panel" style="margin-top:10px">
+      <div class="row r4">
+        <button data-power="boot" class="powerBtn ok">开机 Boot</button>
+        <button data-power="shutdown" class="powerBtn warn">正常关机 Shutdown</button>
+        <button data-power="restart" class="powerBtn">重启 Restart</button>
+        <button data-power="powerOff" class="powerBtn bad">强制断电 PowerOff</button>
+      </div>
+      <div class="row r2" style="margin-top:10px">
+        <button id="toggleRescue">切换救援模式 Rescue</button>
+        <button id="resetPassword" class="bad">重置系统密码</button>
+      </div>
+      <div id="stateBox" class="muted" style="margin-top:10px"></div>
+    </div>
+
+    <div id="p-system" class="panel" style="margin-top:10px">
+      <h3>系统设置</h3>
+      <div class="row r3">
+        <select id="bootType"><option value="bios">BIOS</option><option value="uefi">UEFI</option></select>
+        <select id="autoCfg"><option value="true">自动配置：开</option><option value="false">自动配置：关</option></select>
+        <button id="saveSettings">保存设置</button>
+      </div>
+      <div class="row r2" style="margin-top:10px">
+        <select id="bootOrder"><option value="hdd,cdrom">硬盘优先 (hdd,cdrom)</option><option value="cdrom,hdd">光盘优先 (cdrom,hdd)</option></select>
+        <button id="setBootOrder">设置启动顺序</button>
+      </div>
+      <h3 style="margin-top:14px">重装系统（Build）</h3>
+      <div class="row r1">
+        <select id="buildMethod"><option value="template">模板安装</option><option value="self">自定义安装</option></select>
+      </div>
+      <div class="row r3" style="margin-top:10px">
+        <input id="buildHostname" placeholder="hostname（可选）">
+        <input id="buildName" placeholder="安装后名称（可选）">
+        <input id="buildTimezone" placeholder="时区（默认 UTC）" value="UTC">
+      </div>
+      <div class="row r3" style="margin-top:10px">
+        <select id="templateId"><option value="">选择模板ID（自动加载）</option></select>
+        <select id="swapVal"><option value="">选择Swap（自动加载）</option></select>
+        <select id="ipv6"><option value="true">IPv6 开</option><option value="false">IPv6 关</option></select>
+      </div>
+      <div class="row r2" style="margin-top:10px">
+        <input id="sshKeyIds" placeholder="SSH Key IDs（逗号分隔，如 1,4,8）">
+        <button id="doBuild" class="bad">执行重装</button>
+      </div>
+    </div>
+
+    <div id="p-vnc" class="panel" style="margin-top:10px">
+      <div class="row r2">
+        <button id="toggleVnc">切换 VNC 开关</button>
+        <button id="getVncInfo" class="warn">查看 VNC 信息</button>
+      </div>
+      <div id="vncBox" class="muted" style="margin-top:10px"></div>
+    </div>
+
+    <div id="p-iso" class="panel" style="margin-top:10px">
+      <div class="row r1">
+        <input id="isoValue" placeholder="ISO ID 或远程 ISO URL">
+      </div>
+      <div class="row r2" style="margin-top:10px">
+        <button id="mountIso" class="warn">挂载/弹出 ISO</button>
+        <div id="isoList" class="muted">暂无数据</div>
+      </div>
+    </div>
+
+    <div id="p-tasks" class="panel" style="margin-top:10px">
+      <div class="row r2">
+        <input id="taskId" placeholder="任务 ID（用于查看单任务）">
+        <button id="loadOneTask">查看单个任务</button>
+      </div>
+      <table style="margin-top:10px"><thead><tr><th>动作</th><th>状态</th><th>完成</th><th>成功</th><th>更新时间</th></tr></thead><tbody id="taskTbody"></tbody></table>
+    </div>
+
+    <div id="p-ssh" class="panel" style="margin-top:10px">
+      <div class="row r2">
+        <input id="keyId" placeholder="要删除的 Key ID">
+        <button id="delKey" class="bad">删除 SSH Key</button>
+      </div>
+      <div class="row r2" style="margin-top:10px">
+        <input id="keyName" placeholder="新 Key 名称">
+        <textarea id="keyPub" placeholder="SSH 公钥内容"></textarea>
+      </div>
+      <button id="addKey" style="margin-top:10px">新增 SSH Key</button>
+      <table style="margin-top:10px"><thead><tr><th>ID</th><th>名称</th><th>类型</th><th>启用</th><th>创建时间</th></tr></thead><tbody id="keyTbody"></tbody></table>
+    </div>
+  </div>
+</div>
+
+<div id="authModal" class="modal">
+  <div class="modal-card">
+    <h3 id="authModalTitle">登录</h3>
+    <div class="row r2" style="margin-top:10px">
+      <input id="authUser" placeholder="用户名">
+      <input id="authPass" type="password" placeholder="密码">
+    </div>
+    <div id="turnstileWrap" style="margin-top:10px;display:none"><div id="turnstileBox"></div></div>
+    <div id="authErr" class="errtxt" style="margin-top:8px;display:none"></div>
+    <div class="row r2" style="margin-top:10px">
+      <button id="submitAuth" class="ok">确认</button>
+      <button id="closeAuth" class="warn">取消</button>
+    </div>
+  </div>
+</div>
+
+<div id="adminModal" class="modal">
+  <div class="modal-card">
+    <h3>安全设置（admin）</h3>
+    <label style="display:flex;align-items:center;gap:8px;margin-top:10px"><input id="captchaEnabled" type="checkbox" style="width:auto">启用登录/注册 Cloudflare 验证</label>
+    <input id="turnstileSiteKey" placeholder="Turnstile Site Key" style="margin-top:10px">
+    <input id="turnstileSecret" type="password" placeholder="Turnstile Secret" style="margin-top:10px">
+    <div class="row r2" style="margin-top:10px">
+      <button id="saveAdminSettings" class="ok">保存</button>
+      <button id="closeAdmin" class="warn">关闭</button>
+    </div>
+  </div>
+</div>
+
+<div id="actionModal" class="modal">
+  <div class="modal-card">
+    <h3 id="actionModalTitle">操作</h3>
+    <div id="actionModalBody" class="row r2" style="margin-top:10px"></div>
+    <div class="row r1" style="margin-top:10px">
+      <button id="closeAction" class="warn">关闭</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast" style="display:none"></div>
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
+<script>
+const $=id=>document.getElementById(id);
+const toast=()=>{};
+let currentProvider = localStorage.getItem('bf_provider') || 'bitsflow';
+let currentServerProvider = '';
+let currentTokenId = '';
+let loggedInUser = null;
+let authConfig = { captchaEnabled:false, turnstileSiteKey:'', isAdmin:false };
+let csrfToken = '';
+let lastTokenEntries = [];
+let turnstileWidgetId = null;
+$('provider').value = currentProvider;
+async function apiLocal(method,path,body){
+  const headers={'content-type':'application/json'};
+  if(!['GET','HEAD'].includes(String(method).toUpperCase()) && csrfToken) headers['x-csrf-token']=csrfToken;
+  const r = await fetch(path,{method,headers,body:body?JSON.stringify(body):undefined});
+  const txt = await r.text(); let data={}; try{data=txt?JSON.parse(txt):{}}catch{data={message:txt}};
+  if(!r.ok) throw new Error(data.error||data.message||`请求失败(${r.status})`);
+  return data;
+}
+async function loadAuthConfig(){
+  try{ authConfig = await apiLocal('GET','/auth/config'); }catch{ authConfig = { captchaEnabled:false, turnstileSiteKey:'', isAdmin:false }; }
+}
+function setupTurnstile(){
+  const need = authConfig.captchaEnabled && authConfig.turnstileSiteKey;
+  $('turnstileWrap').style.display = need ? 'block' : 'none';
+  if(!need || !window.turnstile) return;
+  if(turnstileWidgetId!==null){ try{ window.turnstile.remove(turnstileWidgetId);}catch{} turnstileWidgetId=null; }
+  turnstileWidgetId = window.turnstile.render('#turnstileBox', { sitekey: authConfig.turnstileSiteKey });
+}
+function getCaptchaToken(){
+  if(!(authConfig.captchaEnabled && authConfig.turnstileSiteKey)) return '';
+  if(!window.turnstile || turnstileWidgetId===null) return '';
+  return window.turnstile.getResponse(turnstileWidgetId) || '';
+}
+function renderTokenList(arr){
+  const box=$('tokenStatusList');
+  box.innerHTML='';
+  if(!arr.length){ box.innerHTML='<div class="muted">暂无已导入 Token</div>'; return; }
+  arr.forEach(x=>{
+    const d=document.createElement('div');
+    d.className='card';
+    d.style.margin='0';
+    d.style.padding='8px';
+    d.innerHTML=`<div style='font-size:13px'><b>${providerLabelOf(x.provider)}</b> · ${x.label||'-'}</div><div class='muted' style='font-size:11px'>${x.id}</div><div style='margin-top:6px'><button data-del-token-id='${x.id}' class='bad' style='width:auto;padding:5px 10px;border-radius:8px;font-size:12px'>删</button></div>`;
+    box.appendChild(d);
+  });
+}
+async function refreshTokenList(){
+  const card=$('tokenImportCard');
+  const box=$('tokenStatusList');
+  if(!loggedInUser){ card.style.display='none'; return; }
+  card.style.display='block';
+  box.innerHTML='<div class="muted">正在加载 Token 列表...</div>';
+  try{
+    const r=await apiLocal('GET','/auth/tokens');
+    const arr=Array.isArray(r.data)?r.data:[];
+    lastTokenEntries = arr;
+    renderTokenList(arr);
+  }catch(e){
+    if(lastTokenEntries.length){ renderTokenList(lastTokenEntries); return; }
+    box.innerHTML=`<div class="muted">Token 列表加载失败：${e.message||'unknown'}</div>`;
+  }
+}
+
+async function loadTokenForProvider(){
+  $('token').value = '';
+  $('rememberToken').checked = false;
+  $('rememberToken').disabled = true;
+  if(loggedInUser) await refreshTokenList();
+}
+let currentServer='';
+
+
+function needServer(){const id=(currentServer||'').trim();if(!id){toast('先选择服务器',false);return null;}return id;}
+function humanStatus(st){if(st==='complete')return '已完成';if(st==='accepted')return '已受理';if(st==='running')return '执行中';return st||'-';}
+function actionCn(a){const m={boot_server:'开机',poweroff_server:'强制关机',restart_server:'重启',shutdown_server:'关机',build_server:'重装系统',enable_rescue:'开启救援',disable_rescue:'关闭救援',enable_vnc:'开启VNC',disable_vnc:'关闭VNC'};return m[a]||a||'-';}
+function setSelectedHint(msg,html=false){const el=$('selectedHint');if(!el)return;if(html)el.innerHTML=msg;else el.textContent=msg;}
+function parseApiDate(v){
+  if(!v) return null;
+  const s=String(v).replace(/\.(\d{3})\d+Z$/,'.$1Z'); // 兼容 6位微秒时间戳
+  const d=new Date(s);
+  return Number.isNaN(d.getTime())?null:d;
+}
+function formatEndDate(endRaw){
+  const end=parseApiDate(endRaw);
+  if(!end) return '-';
+  try{
+    return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit'}).format(end);
+  }catch{
+    return `${end.getUTCFullYear()}-${String(end.getUTCMonth()+1).padStart(2,'0')}-${String(end.getUTCDate()).padStart(2,'0')}`;
+  }
+}
+function providerLabelOf(p){ return p==='nosla' ? 'Nosla' : 'BitsFlow'; }
+function formatTokenLabel(provider,label){
+  const raw=(label||'').trim();
+  if(!raw) return providerLabelOf(provider);
+  return raw
+    .replace(/^bitsflow/i,'BitsFlow')
+    .replace(/^nosla/i,'Nosla');
+}
+function providerLabel(){ return providerLabelOf(currentProvider); }
+function selectServer(id,name,ip='-',provider=currentProvider,tokenId=''){
+  currentServerProvider=provider;
+  currentTokenId=tokenId||'';
+  currentServer=id;
+  panelAutoLoaded.clear();
+  setSelectedHint(`当前服务器：${name}（${id}）`);
+}
+
+async function api(method,path,body,provider=(currentServerProvider||currentProvider),tokenId=currentTokenId){
+  const headers={accept:'application/json','x-provider':provider};
+  if(tokenId) headers['x-token-id']=tokenId;
+  if(!['GET','HEAD'].includes(String(method).toUpperCase()) && csrfToken) headers['x-csrf-token']=csrfToken;
+  if(body!==undefined)headers['content-type']='application/json';
+  const r=await fetch('/api/proxy?path='+encodeURIComponent(path),{method,headers,body:body===undefined?undefined:JSON.stringify(body)});
+  const txt=await r.text(); let data={}; try{data=txt?JSON.parse(txt):{}}catch{data={message:txt}};
+  if(!r.ok){
+    const msg = data?.errors?.join('；') || data?.message || `请求失败（${r.status}）`;
+    throw new Error(msg);
+  }
+  return data;
+}
+
+const panelAutoLoaded = new Set();
+async function autoLoadForPanel(panelId, force=false){
+  try{
+    if(!force && panelAutoLoaded.has(panelId)) return;
+    if(panelId==='p-servers') { await loadServers(); await loadServerDetail(); }
+    if(panelId==='p-power') { await refreshState(); }
+    if(panelId==='p-system') { await loadTemplates(); await loadSwap(); }
+    if(panelId==='p-vnc') { await $('getVncInfo').onclick(); }
+    if(panelId==='p-iso') { await loadIsos(); }
+    if(panelId==='p-tasks') { await loadTasks(); }
+    if(panelId==='p-ssh') { await loadKeys(); }
+    panelAutoLoaded.add(panelId);
+  }catch{}
+}
+
+// tabs
+[...document.querySelectorAll('.tab')].forEach(el=>el.onclick=async()=>{
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));el.classList.add('active');
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));$(el.dataset.panel).classList.add('active');
+  await autoLoadForPanel(el.dataset.panel);
+});
+
+$('provider').onchange=async()=>{
+  currentProvider = $('provider').value;
+  await loadTokenForProvider();
+  toast(`已切换站点：${providerLabel()}（仅用于Token操作，不刷新服务器列表）`);
+};
+$('saveToken').onclick=async()=>{try{
+  if(!loggedInUser) return toast('请先登录，再保存Token',false);
+  const raw=$('token').value.trim();
+  if(!raw) return toast('请输入Token',false);
+  const token=/^Bearer\s+/i.test(raw)?raw.replace(/^Bearer\s+/i,''):raw;
+  await apiLocal('POST','/auth/tokens',{provider:currentProvider,label:`${currentProvider}-${Date.now().toString().slice(-4)}`,token});
+  $('token').value='';
+  await refreshTokenList();
+  await loadServers();
+  return toast(`${providerLabel()} Token 已新增`);
+}catch(e){toast(e.message,false)}};
+$('connect').onclick=async()=>{try{await api('GET','/connect',undefined,currentProvider,'');toast(`${providerLabel()} 已连接，正在自动加载数据`);await loadServers();await autoLoadForPanel('p-servers',true);}catch(e){toast(e.message,false)}};
+
+async function loadServers(){try{
+const box=$('servers');box.innerHTML='<div class="muted">正在拉取服务器列表...</div>';
+setSelectedHint('正在拉取服务器，请稍候...');
+let merged=[];
+if(loggedInUser){
+  const ts=await apiLocal('GET','/auth/tokens');
+  const entries=(Array.isArray(ts.data)?ts.data:[]);
+  lastTokenEntries = entries;
+  renderTokenList(entries);
+  for(const t of entries){
+
+    try{
+      const r=await api('GET','/server?results=200',undefined,t.provider,t.id);
+      const arr=Array.isArray(r.data)?r.data:[];
+      merged.push(...arr.map(s=>({...s,__provider:t.provider,__tokenId:t.id,__tokenLabel:t.label||'-'})));
+    }catch{}
+  }
+}else{
+  const r=await api('GET','/server?results=200');
+  const arr=Array.isArray(r.data)?r.data:[];
+  merged=arr.map(s=>({...s,__provider:currentProvider}));
+}
+if(!merged.length){box.innerHTML='<div class="muted">没有服务器</div>';setSelectedHint('当前账号下没有服务器');return}
+box.innerHTML='';
+let firstCard=null,first={id:'',name:'',ip:'-',provider:currentProvider};
+merged.forEach((s,idx)=>{const id=s.id,name=s.name||'未命名',cpu=s.cpu||'-',mem=s.memory||'-',ip=s?.network?.primary?.ipv4?.[0]?.address||'-',provider=s.__provider||currentProvider,tokenId=s.__tokenId||'',tokenLabel=s.__tokenLabel||'-';const boot=s.uefi?'UEFI':'BIOS';const disk=(Array.isArray(s.storage)?s.storage.map(x=>x.capacity).join(' + '):'-')||'-';const ipv6Count=Array.isArray(s?.network?.primary?.ipv6)?s.network.primary.ipv6.length:0;const bw=(s?.network?.primary?.limit ?? s?.network?.secondary?.[0]?.limit ?? s?.network?.secondary?.limit);const bwText=(bw===null||bw===undefined||bw==='')?'不限/未知':String(bw);const endRaw=s?.currentMonthlyPeriod?.end||'';const endDate=formatEndDate(endRaw);const tokenText=formatTokenLabel(provider,tokenLabel);const d=document.createElement('div');d.className='item';d.innerHTML=`<div class='title'>${name}</div><div class='muted'>${id}</div><div style='margin:6px 0'><span class='pill'>${tokenText}</span> <span class='pill'>CPU ${cpu}</span> <span class='pill'>内存 ${mem}</span></div><div class='muted'>IPv4: ${ip}</div><div class='muted'>磁盘: ${disk} ｜ 引导: ${boot} ｜ IPv6段: ${ipv6Count}</div><div class='muted'>带宽: ${bwText} ｜ 到期日: ${endDate}</div>`;d.onclick=()=>{document.querySelectorAll('.item').forEach(x=>x.classList.remove('active'));d.classList.add('active');selectServer(id,name,ip,provider,tokenId);};if(idx===0){firstCard=d;first={id,name,ip,provider,tokenId};}box.appendChild(d)});
+if(firstCard){firstCard.classList.add('active');selectServer(first.id,first.name,first.ip,first.provider,first.tokenId);}
+toast(`已加载 ${merged.length} 台服务器（多站点聚合）`);}catch(e){toast(e.message,false)}}
+
+async function loadServerDetail(){const id=needServer();if(!id)return;try{const r=await api('GET',`/server/${id}?state=true`);const d=r.data||{};const st=d.state||{};setSelectedHint(`当前服务器：${d.name||'-'}（${id}）｜状态：${st.running?'运行中':'已停止'} (${st.status||'-'})`);}catch(e){toast(e.message,false)}}
+if($('loadServerDetail')) $('loadServerDetail').onclick=loadServerDetail;
+
+$('renameServer').onclick=async()=>{const id=needServer();if(!id)return;const name=$('newName').value.trim();if(!name)return toast('请输入新名称',false);try{await api('PUT',`/server/${id}/name`,{name});toast('服务器名称已修改');$('newName').value='';}catch(e){toast(e.message,false)}};
+
+[...document.querySelectorAll('.powerBtn')].forEach(b=>b.onclick=async()=>{const id=needServer();if(!id)return;try{await api('POST',`/server/${id}/${b.dataset.power}`);toast(`已提交：${b.textContent}`);}catch(e){toast(e.message,false)}});
+async function refreshState(){const id=needServer();if(!id)return;try{const r=await api('GET',`/server/${id}?state=true`);const s=r?.data?.state||{};$('stateBox').innerHTML=`当前状态：<b>${s.running?'运行中':'已停止'}</b>（${s.status||'-'}），CPU：${s.cpu||'-'}`;toast('状态已刷新');}catch(e){toast(e.message,false)}}
+$('toggleRescue').onclick=async()=>{const id=needServer();if(!id)return;try{await api('POST',`/server/${id}/rescue`);toast('救援模式切换请求已提交');}catch(e){toast(e.message,false)}};
+$('resetPassword').onclick=async()=>{const id=needServer();if(!id)return;try{const r=await api('POST',`/server/${id}/resetPassword`);const pwd=r?.data?.expectedPassword;toast(pwd?`新密码：${pwd}`:'重置密码请求已提交');}catch(e){toast(e.message,false)}};
+
+$('saveSettings').onclick=async()=>{const id=needServer();if(!id)return;try{await api('PUT',`/server/${id}/settings`,{bootType:$('bootType').value,autoConfiguration:$('autoCfg').value==='true'});toast('系统设置已保存');}catch(e){toast(e.message,false)}};
+$('setBootOrder').onclick=async()=>{const id=needServer();if(!id)return;try{await api('POST',`/server/${id}/bootOrder`,{order:$('bootOrder').value});toast('启动顺序已提交');}catch(e){toast(e.message,false)}};
+async function loadTemplates(){const id=needServer();if(!id)return;try{const r=await api('GET',`/server/${id}/operatingSystemTemplates`);const arr=(Array.isArray(r.data)?r.data:[]).slice().sort((a,b)=>(a.name||'').localeCompare((b.name||''),undefined,{numeric:true,sensitivity:'base'}));const s=$('templateId');s.innerHTML='<option value="">选择模板ID</option>';arr.forEach(x=>{const o=document.createElement('option');o.value=x.id;o.textContent=`${x.id} - ${x.name}`;s.appendChild(o)});toast(`模板已加载 ${arr.length} 条（按系统名称排序）`);}catch(e){toast(e.message,false)}}
+async function loadSwap(){const id=needServer();if(!id)return;try{const r=await api('GET',`/server/${id}/swap`);const arr=Array.isArray(r.data)?r.data:[];const s=$('swapVal');s.innerHTML='<option value="">选择Swap</option>';arr.forEach(x=>{const o=document.createElement('option');o.value=x.value;o.textContent=`${x.value} - ${x.description}`;s.appendChild(o)});toast('Swap 选项已加载');}catch(e){toast(e.message,false)}}
+$('doBuild').onclick=async()=>{const id=needServer();if(!id)return;try{const method=$('buildMethod').value;const payload={method,hostname:$('buildHostname').value.trim()||undefined,name:$('buildName').value.trim()||undefined,timezone:$('buildTimezone').value.trim()||'UTC',ipv6:$('ipv6').value==='true'};const t=$('templateId').value;if(method==='template'){if(!t)return toast('模板安装必须选择 templateId',false);payload.templateId=Number(t);}const sw=$('swapVal').value;if(sw!=='')payload.swap=Number(sw);const keys=$('sshKeyIds').value.trim();if(keys)payload.sshKeys=keys.split(',').map(x=>Number(x.trim())).filter(Boolean);await api('POST',`/server/${id}/build`,payload);toast('重装任务已提交（请到任务页查看进度）');}catch(e){toast(e.message,false)}};
+
+$('toggleVnc').onclick=async()=>{const id=needServer();if(!id)return;try{await api('POST',`/server/${id}/vnc`);toast('VNC 开关切换请求已提交');}catch(e){toast(e.message,false)}};
+$('getVncInfo').onclick=async()=>{const id=needServer();if(!id)return;try{const r=await api('GET',`/server/${id}/vnc`);const d=r.data||{};$('vncBox').innerHTML=`状态：<b>${d.enabled?'开启':'关闭'}</b> ｜ 地址：${d.ip||'-'}:${d.port||'-'} ｜ 临时密码：${d.password||'-'} ｜ Web路径：${d?.wss?.url||'-'}`;toast('VNC 信息已更新');}catch(e){toast(e.message,false)}};
+
+async function loadIsos(){const id=needServer();if(!id)return;try{const r=await api('GET',`/server/${id}/isos`);const arr=Array.isArray(r.data)?r.data:[];$('isoList').innerHTML=arr.length?arr.map(x=>`${x.id} - ${x.name}`).join(' ｜ '):'无可用 ISO';toast('ISO 列表已刷新');}catch(e){toast(e.message,false)}}
+$('mountIso').onclick=async()=>{const id=needServer();if(!id)return;const iso=$('isoValue').value.trim();if(!iso)return toast('请输入 ISO ID 或 URL',false);try{await api('POST',`/server/${id}/iso`,{iso});toast('ISO 操作已提交');}catch(e){toast(e.message,false)}};
+
+async function loadTasks(){const id=needServer();if(!id)return;try{const r=await api('GET',`/server/${id}/tasks`);const arr=Array.isArray(r.data)?r.data:[];const tb=$('taskTbody');tb.innerHTML='';arr.forEach(x=>{const tr=document.createElement('tr');tr.innerHTML=`<td>${actionCn(x.action)}</td><td>${humanStatus(x.status)}</td><td>${x.completed?'是':'否'}</td><td>${x.success?'是':'否'}</td><td>${x.updated||'-'}</td>`;tb.appendChild(tr)});toast(`已加载 ${arr.length} 条任务`);}catch(e){toast(e.message,false)}}
+$('loadOneTask').onclick=async()=>{const id=needServer();if(!id)return;const taskId=$('taskId').value.trim();if(!taskId)return toast('请输入任务 ID',false);try{const r=await api('GET',`/server/${id}/task/${taskId}`);const t=r.data||{};toast(`任务：${actionCn(t.action)}｜状态：${humanStatus(t.status)}｜${t.success?'成功':'未成功'}`);}catch(e){toast(e.message,false)}};
+
+async function loadKeys(){try{const r=await api('GET','/account/sshKeys?results=200');const arr=Array.isArray(r.data)?r.data:[];const tb=$('keyTbody');tb.innerHTML='';arr.forEach(k=>{const tr=document.createElement('tr');tr.innerHTML=`<td>${k.id}</td><td>${k.name||'-'}</td><td>${k.type||'-'}</td><td>${k.enabled?'是':'否'}</td><td>${k.created||'-'}</td>`;tb.appendChild(tr)});toast(`SSH Keys 已加载 ${arr.length} 条`);}catch(e){toast(e.message,false)}}
+$('addKey').onclick=async()=>{const name=$('keyName').value.trim(),publicKey=$('keyPub').value.trim();if(!name||!publicKey)return toast('名称和公钥都要填写',false);try{await api('POST','/account/sshKeys',{name,publicKey});toast('SSH Key 新增成功');$('keyName').value='';$('keyPub').value='';await loadKeys();}catch(e){toast(e.message,false)}};
+$('delKey').onclick=async()=>{const id=$('keyId').value.trim();if(!id)return toast('请输入要删除的 Key ID',false);try{await api('DELETE',`/account/sshKeys/${id}`);toast('SSH Key 已删除');$('keyId').value='';await loadKeys();}catch(e){toast(e.message,false)}};
+
+function openActionModalHtml(title, html){
+  $('actionModalTitle').textContent=title;
+  $('actionModalBody').innerHTML=html;
+  $('actionModal').classList.add('show');
+}
+$('closeAction').onclick=()=>$('actionModal').classList.remove('show');
+$('actionModal').onclick=(e)=>{ if(e.target.id==='actionModal') $('actionModal').classList.remove('show'); };
+
+$('openPowerActions').onclick=()=>openActionModalHtml('电源与救援操作',`
+  <button class='ok' id='mBoot'>开机</button>
+  <button class='warn' id='mShutdown'>关机</button>
+  <button id='mRestart'>重启</button>
+  <button class='bad' id='mPowerOff'>强制断电</button>
+  <button id='mRescue'>切换救援模式</button>
+  <button class='bad' id='mResetPwd'>重置系统密码</button>
+`);
+
+$('openSystemActions').onclick=async()=>{
+  const id=needServer(); if(!id) return;
+  await loadTemplates(); await loadSwap();
+  openActionModalHtml('系统重装/设置', `
+    <select id='mBootType'><option value='bios'>BIOS</option><option value='uefi'>UEFI</option></select>
+    <select id='mAutoCfg'><option value='true'>自动配置：开</option><option value='false'>自动配置：关</option></select>
+    <button id='mSaveSettings'>保存系统设置</button>
+    <select id='mBuildMethod'><option value='template'>模板安装</option><option value='self'>自定义安装</option></select>
+    <select id='mTemplateId'><option value=''>模板ID</option>${$('templateId').innerHTML.replace('<option value="">选择模板ID</option>','')}</select>
+    <select id='mSwap'><option value=''>Swap</option>${$('swapVal').innerHTML.replace('<option value="">选择Swap</option>','')}</select>
+    <input id='mBuildName' placeholder='安装后名称（可选）'>
+    <button class='bad' id='mBuild'>执行重装</button>
+  `);
+};
+
+$('openVncActions').onclick=()=>openActionModalHtml('VNC',`
+  <button id='mToggleVnc'>切换VNC</button>
+  <button id='mGetVnc'>查看VNC信息</button>
+  <div class='muted' id='mVncInfo'>-</div>
+`);
+
+$('openIsoActions').onclick=()=>openActionModalHtml('ISO',`
+  <input id='mIso' placeholder='ISO ID 或 远程 URL'>
+  <button id='mMountIso'>挂载/弹出ISO</button>
+  <button id='mLoadIsoList'>加载ISO列表</button>
+  <div class='muted' id='mIsoList'>-</div>
+`);
+
+$('openTaskActions').onclick=()=>openActionModalHtml('任务',`
+  <button id='mLoadTasks'>查看最近任务</button>
+  <input id='mTaskId' placeholder='任务ID'>
+  <button id='mOneTask'>查看单任务</button>
+  <div class='muted' id='mTaskOut'>-</div>
+`);
+
+$('openSshActions').onclick=()=>openActionModalHtml('SSH Keys',`
+  <button id='mLoadKeys'>加载SSH Keys</button>
+  <input id='mKeyName' placeholder='新Key名称'>
+  <input id='mKeyPub' placeholder='SSH公钥'>
+  <button id='mAddKey'>新增SSH Key</button>
+  <input id='mDelKeyId' placeholder='删除Key ID'>
+  <button class='bad' id='mDelKey'>删除SSH Key</button>
+`);
+
+$('openRenameActions').onclick=()=>openActionModalHtml('服务器改名',`
+  <input id='mNewName' placeholder='新服务器名称'>
+  <button id='mRename'>执行改名</button>
+  <button id='mDetail'>查看详细信息</button>
+`);
+
+document.addEventListener('click', async (e)=>{
+  const id=e.target?.id;
+  if(id==='mBoot') return document.querySelector("button[data-power='boot']")?.click();
+  if(id==='mShutdown') return document.querySelector("button[data-power='shutdown']")?.click();
+  if(id==='mRestart') return document.querySelector("button[data-power='restart']")?.click();
+  if(id==='mPowerOff') return document.querySelector("button[data-power='powerOff']")?.click();
+  if(id==='mRescue') return $('toggleRescue').click();
+  if(id==='mResetPwd') return $('resetPassword').click();
+  if(id==='mSaveSettings') { $('bootType').value=$('mBootType').value; $('autoCfg').value=$('mAutoCfg').value; return $('saveSettings').click(); }
+  if(id==='mBuild') {
+    $('buildMethod').value=$('mBuildMethod').value;
+    $('templateId').value=$('mTemplateId').value;
+    $('swapVal').value=$('mSwap').value;
+    $('buildName').value=$('mBuildName').value;
+    return $('doBuild').click();
+  }
+  if(id==='mToggleVnc') return $('toggleVnc').click();
+  if(id==='mGetVnc') {
+    await $('getVncInfo').click();
+    $('mVncInfo').textContent=$('vncBox').innerText||'-';
+    return;
+  }
+  if(id==='mMountIso') { $('isoValue').value=$('mIso').value; return $('mountIso').click(); }
+  if(id==='mLoadIsoList') { await loadIsos(); $('mIsoList').textContent=$('isoList').innerText||'-'; return; }
+  if(id==='mLoadTasks') { await loadTasks(); $('mTaskOut').textContent='任务已加载，请看任务面板表格'; return; }
+  if(id==='mOneTask') { $('taskId').value=$('mTaskId').value; return $('loadOneTask').click(); }
+  if(id==='mLoadKeys') return loadKeys();
+  if(id==='mAddKey') { $('keyName').value=$('mKeyName').value; $('keyPub').value=$('mKeyPub').value; return $('addKey').click(); }
+  if(id==='mDelKey') { $('keyId').value=$('mDelKeyId').value; return $('delKey').click(); }
+  if(id==='mRename') { $('newName').value=$('mNewName').value; return $('renameServer').click(); }
+  if(id==='mDetail') return loadServerDetail();
+});
+
+let authMode = 'login';
+async function openAuth(mode){ authMode=mode; $('authModalTitle').textContent = mode==='register' ? '注册' : '登录'; $('submitAuth').textContent = mode==='register' ? '注册并登录' : '登录'; $('authErr').style.display='none'; $('authErr').textContent=''; await loadAuthConfig(); $('authModal').classList.add('show'); setTimeout(setupTurnstile,50); }
+function closeAuth(){ $('authModal').classList.remove('show'); }
+function renderAuthState(){
+  if(loggedInUser){
+    $('authState').textContent = `已登录：${loggedInUser}`;
+    $('openLogin').style.display='none';
+    $('openRegister').style.display='none';
+    $('openAdmin').style.display = (loggedInUser==='admin') ? 'inline' : 'none';
+    $('logoutBtn').style.display='inline';
+    $('saveToken').style.display='inline-block';
+    $('tokenImportCard').style.display='block';
+  }else{
+    $('authState').textContent = '未登录';
+    $('openLogin').style.display='inline';
+    $('openRegister').style.display='inline';
+    $('openAdmin').style.display='none';
+    $('logoutBtn').style.display='none';
+    $('saveToken').style.display='none';
+    $('tokenImportCard').style.display='none';
+  }
+}
+$('openLogin').onclick=()=>openAuth('login');
+$('openRegister').onclick=()=>openAuth('register');
+$('openAdmin').onclick=async()=>{
+  try{
+    const s=await apiLocal('GET','/admin/settings');
+    $('captchaEnabled').checked=!!s.captchaEnabled;
+    $('turnstileSiteKey').value=s.turnstileSiteKey||'';
+    $('turnstileSecret').value=s.turnstileSecret||'';
+    $('adminModal').classList.add('show');
+  }catch(e){ toast(e.message,false); }
+};
+$('closeAdmin').onclick=()=>$('adminModal').classList.remove('show');
+$('adminModal').onclick=(e)=>{ if(e.target.id==='adminModal') $('adminModal').classList.remove('show'); };
+$('saveAdminSettings').onclick=async()=>{ try{ await apiLocal('PUT','/admin/settings',{captchaEnabled:$('captchaEnabled').checked,turnstileSiteKey:$('turnstileSiteKey').value.trim(),turnstileSecret:$('turnstileSecret').value.trim()}); await loadAuthConfig(); $('adminModal').classList.remove('show'); }catch(e){toast(e.message,false)} };
+$('closeAuth').onclick=closeAuth;
+$('authModal').onclick=(e)=>{ if(e.target.id==='authModal') closeAuth(); };
+$('authUser').addEventListener('keydown',(e)=>{ if(e.key==='Enter') $('submitAuth').click(); });
+$('authPass').addEventListener('keydown',(e)=>{ if(e.key==='Enter') $('submitAuth').click(); });
+$('submitAuth').onclick=async()=>{
+  try{
+    const username=$('authUser').value.trim();const password=$('authPass').value;const captchaToken=getCaptchaToken();
+    if(authMode==='register') await apiLocal('POST','/auth/register',{username,password,captchaToken});
+    await apiLocal('POST','/auth/login',{username,password,captchaToken});
+    const me = await apiLocal('GET','/auth/me');
+    csrfToken = me.csrfToken || '';
+    loggedInUser=me.username||username; renderAuthState(); await loadTokenForProvider(); closeAuth();
+    try{ await $('connect').onclick(); }catch{}
+  }catch(e){ $('authErr').textContent = e.message || '登录失败'; $('authErr').style.display='block'; }
+};
+$('logoutBtn').onclick=async()=>{try{await apiLocal('POST','/auth/logout',{});loggedInUser=null;csrfToken='';renderAuthState();await loadTokenForProvider();$('tokenImportCard').style.display='none';toast('已退出登录');}catch(e){toast(e.message,false)}};
+
+
+$('clearAllTokens').onclick=async()=>{
+  try{
+    const r=await apiLocal('GET','/auth/tokens');
+    for(const t of (r.data||[])) await apiLocal('DELETE',`/auth/tokens/${t.id}`);
+    await refreshTokenList();
+    await loadServers();
+    toast('已清空全部Token');
+  }catch(err){toast(err.message,false)}
+};
+
+document.addEventListener('click', async(e)=>{
+  const id=e.target?.dataset?.delTokenId;
+  if(!id) return;
+  try{
+    await apiLocal('DELETE',`/auth/tokens/${id}`);
+    await refreshTokenList();
+    await loadServers();
+    toast(`Token 已删除`);
+  }catch(err){toast(err.message,false)}
+});
+
+window.addEventListener('load', async()=>{
+  await loadAuthConfig();
+  try{
+    const me = await fetch('/auth/me').then(r=>r.json());
+    if(me.loggedIn){ loggedInUser = me.username; csrfToken = me.csrfToken || ''; renderAuthState(); await loadTokenForProvider(); await refreshTokenList(); }
+    else { renderAuthState(); }
+  }catch{ renderAuthState(); }
+  try { await $('connect').onclick(); } catch {}
+});
+</script>
+</body>
+</html>
