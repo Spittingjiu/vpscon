@@ -137,7 +137,7 @@ cd /opt/vpscon && git pull && npm install && systemctl restart vpscon.service
 
 ## G. 失败时只做这件事
 
-把这条命令输出完整复制给我：
+执行下面命令，并保留完整输出：
 
 ```bash
 journalctl -u vpscon.service -n 200 --no-pager
