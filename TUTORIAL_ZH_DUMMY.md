@@ -143,5 +143,5 @@ cd /opt/vpscon && git pull && npm install && systemctl restart vpscon.service
 journalctl -u vpscon.service -n 200 --no-pager
 ```
 
-不要自己猜，不要自己乱改。把输出贴过来，我给你下一步。
+把输出完整贴出来，按日志定位下一步。
 

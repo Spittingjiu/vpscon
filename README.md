@@ -21,6 +21,10 @@ npm start
 ## 生产部署（systemd）
 参考：`RELEASE.md`
 
+## 教程
+- 标准教程：`TUTORIAL_ZH.md`
+- 傻瓜式教程：`TUTORIAL_ZH_DUMMY.md`
+
 ## 可选环境变量（不配也能用）
 - `PORT`：服务端口（默认 `8787`）
 - `BITSFLOW_BASE`：覆盖 BitsFlow API 基地址（默认内置值）
