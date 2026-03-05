@@ -52,11 +52,18 @@ function writeSettings(s) {
   fs.writeFileSync(settingsFile, JSON.stringify(s, null, 2));
 }
 function getTokenEntries(user) {
-  if (Array.isArray(user.tokenEntries)) return user.tokenEntries;
+  if (Array.isArray(user.tokenEntries)) {
+    return user.tokenEntries.map((t) => ({
+      ...t,
+      createdAt: t.createdAt || new Date().toISOString(),
+      updatedAt: t.updatedAt || t.createdAt || new Date().toISOString()
+    }));
+  }
   const legacy = user.tokens || {};
+  const now = new Date().toISOString();
   const out = [];
-  if (legacy.bitsflow) out.push({ id: crypto.randomUUID(), provider: 'bitsflow', label: 'bitsflow-1', token: legacy.bitsflow });
-  if (legacy.nosla) out.push({ id: crypto.randomUUID(), provider: 'nosla', label: 'nosla-1', token: legacy.nosla });
+  if (legacy.bitsflow) out.push({ id: crypto.randomUUID(), provider: 'bitsflow', label: 'bitsflow-1', token: legacy.bitsflow, createdAt: now, updatedAt: now });
+  if (legacy.nosla) out.push({ id: crypto.randomUUID(), provider: 'nosla', label: 'nosla-1', token: legacy.nosla, createdAt: now, updatedAt: now });
   return out;
 }
 
@@ -214,6 +221,22 @@ app.post('/auth/logout', (req, res) => {
   return res.json({ ok: true });
 });
 
+app.post('/auth/change-password', requireAuth, requireCsrf, (req, res) => {
+  const oldPassword = req.body?.oldPassword || '';
+  const newPassword = req.body?.newPassword || '';
+  if (!oldPassword || !newPassword) return res.status(400).json({ error: 'oldPassword/newPassword required' });
+  if (newPassword.length < 6) return res.status(400).json({ error: 'new password too short (min 6)' });
+
+  const db = readUsers();
+  const idx = db.users.findIndex(u => u.username === req.user.username);
+  if (idx < 0) return res.status(404).json({ error: 'user missing' });
+  if (!verify(oldPassword, db.users[idx].passwordHash)) return res.status(401).json({ error: 'old password incorrect' });
+
+  db.users[idx].passwordHash = pbkdf(newPassword);
+  writeUsers(db);
+  return res.json({ ok: true });
+});
+
 app.get('/auth/me', (req, res) => {
   const user = authUser(req);
   if (!user) return res.status(401).json({ loggedIn: false });
@@ -258,7 +281,10 @@ app.put('/auth/token/:provider', requireAuth, requireCsrf, (req, res) => {
   if (idx < 0) return res.status(404).json({ error: 'user missing' });
   db.users[idx].tokenEntries = getTokenEntries(db.users[idx]);
   db.users[idx].tokenEntries = db.users[idx].tokenEntries.filter(t => t.provider !== provider);
-  if (token) db.users[idx].tokenEntries.push({ id: crypto.randomUUID(), provider, label: `${provider}-1`, token: encryptToken(token) });
+  if (token) {
+    const now = new Date().toISOString();
+    db.users[idx].tokenEntries.push({ id: crypto.randomUUID(), provider, label: `${provider}-1`, token: encryptToken(token), createdAt: now, updatedAt: now });
+  }
   delete db.users[idx].tokens;
   writeUsers(db);
   return res.json({ ok: true });
@@ -274,7 +300,8 @@ app.post('/auth/tokens', requireAuth, requireCsrf, (req, res) => {
   if (idx < 0) return res.status(404).json({ error: 'user missing' });
   db.users[idx].tokenEntries = getTokenEntries(db.users[idx]);
   const n = db.users[idx].tokenEntries.filter(t => t.provider === provider).length + 1;
-  db.users[idx].tokenEntries.push({ id: crypto.randomUUID(), provider, label: label || `${provider}-${n}`, token: encryptToken(token) });
+  const now = new Date().toISOString();
+  db.users[idx].tokenEntries.push({ id: crypto.randomUUID(), provider, label: label || `${provider}-${n}`, token: encryptToken(token), createdAt: now, updatedAt: now });
   delete db.users[idx].tokens;
   writeUsers(db);
   return res.json({ ok: true });
@@ -291,8 +318,25 @@ app.delete('/auth/tokens/:id', requireAuth, requireCsrf, (req, res) => {
   return res.json({ ok: true });
 });
 
+app.patch('/auth/tokens/:id', requireAuth, requireCsrf, (req, res) => {
+  const id = req.params.id;
+  const label = (req.body?.label || '').trim();
+  if (!label) return res.status(400).json({ error: 'label required' });
+  const db = readUsers();
+  const idx = db.users.findIndex(u => u.username === req.user.username);
+  if (idx < 0) return res.status(404).json({ error: 'user missing' });
+  db.users[idx].tokenEntries = getTokenEntries(db.users[idx]);
+  const tIdx = db.users[idx].tokenEntries.findIndex(t => t.id === id);
+  if (tIdx < 0) return res.status(404).json({ error: 'token missing' });
+  db.users[idx].tokenEntries[tIdx].label = label;
+  db.users[idx].tokenEntries[tIdx].updatedAt = new Date().toISOString();
+  delete db.users[idx].tokens;
+  writeUsers(db);
+  return res.json({ ok: true });
+});
+
 app.get('/auth/tokens', requireAuth, (req, res) => {
-  const entries = getTokenEntries(req.user).map(t => ({ id: t.id, provider: t.provider, label: t.label || '-', hasToken: !!t.token }));
+  const entries = getTokenEntries(req.user).map(t => ({ id: t.id, provider: t.provider, label: t.label || '-', hasToken: !!t.token, createdAt: t.createdAt || '', updatedAt: t.updatedAt || '' }));
   return res.json({ data: entries });
 });
 

@@ -55,6 +55,7 @@
           <span id="authState" class="auth-chip">未登录</span>
           <button id="openLogin" class="linkbtn">登录</button>
           <button id="openRegister" class="linkbtn">注册</button>
+          <button id="openPwd" class="linkbtn" style="display:none">修改密码</button>
           <button id="openAdmin" class="linkbtn" style="display:none">安全设置</button>
           <button id="logoutBtn" class="linkbtn" style="display:none">退出</button>
         </div>
@@ -233,6 +234,21 @@
   </div>
 </div>
 
+<div id="pwdModal" class="modal">
+  <div class="modal-card">
+    <h3>修改密码</h3>
+    <div class="row r1" style="margin-top:10px">
+      <input id="oldPwd" type="password" placeholder="当前密码">
+      <input id="newPwd" type="password" placeholder="新密码（至少 6 位）">
+    </div>
+    <div id="pwdErr" class="errtxt" style="margin-top:8px;display:none"></div>
+    <div class="row r2" style="margin-top:10px">
+      <button id="submitPwd" class="ok">确认修改</button>
+      <button id="closePwd" class="warn">取消</button>
+    </div>
+  </div>
+</div>
+
 <div id="actionModal" class="modal">
   <div class="modal-card">
     <h3 id="actionModalTitle">操作</h3>
@@ -286,10 +302,11 @@ function renderTokenList(arr){
   if(!arr.length){ box.innerHTML='<div class="muted">暂无已导入 Token</div>'; return; }
   arr.forEach(x=>{
     const d=document.createElement('div');
+    const created = x.createdAt ? new Date(x.createdAt).toLocaleString('zh-CN',{hour12:false}) : '-';
     d.className='card';
     d.style.margin='0';
     d.style.padding='8px';
-    d.innerHTML=`<div style='font-size:13px'><b>${providerLabelOf(x.provider)}</b> · ${x.label||'-'}</div><div class='muted' style='font-size:11px'>${x.id}</div><div style='margin-top:6px'><button data-del-token-id='${x.id}' class='bad' style='width:auto;padding:5px 10px;border-radius:8px;font-size:12px'>删</button></div>`;
+    d.innerHTML=`<div style='font-size:13px'><b>${providerLabelOf(x.provider)}</b> · ${x.label||'-'}</div><div class='muted' style='font-size:11px'>ID: ${x.id}</div><div class='muted' style='font-size:11px'>添加时间: ${created}</div><div style='margin-top:6px;display:flex;gap:6px;flex-wrap:wrap'><button data-edit-token-id='${x.id}' data-edit-token-label='${(x.label||'').replace(/"/g,'&quot;')}' class='warn' style='width:auto;padding:5px 10px;border-radius:8px;font-size:12px'>改名</button><button data-del-token-id='${x.id}' class='bad' style='width:auto;padding:5px 10px;border-radius:8px;font-size:12px'>删</button></div>`;
     box.appendChild(d);
   });
 }
@@ -312,8 +329,6 @@ async function refreshTokenList(){
 
 async function loadTokenForProvider(){
   $('token').value = '';
-  $('rememberToken').checked = false;
-  $('rememberToken').disabled = true;
   if(loggedInUser) await refreshTokenList();
 }
 let currentServer='';
@@ -394,7 +409,8 @@ async function autoLoadForPanel(panelId, force=false){
 $('provider').onchange=async()=>{
   currentProvider = $('provider').value;
   await loadTokenForProvider();
-  toast(`已切换站点：${providerLabel()}（仅用于Token操作，不刷新服务器列表）`);
+  await loadServers();
+  toast(`已切换站点：${providerLabel()}，已刷新服务器列表`);
 };
 $('saveToken').onclick=async()=>{try{
   if(!loggedInUser) return toast('请先登录，再保存Token',false);
@@ -407,36 +423,47 @@ $('saveToken').onclick=async()=>{try{
   await loadServers();
   return toast(`${providerLabel()} Token 已新增`);
 }catch(e){toast(e.message,false)}};
-$('connect').onclick=async()=>{try{await api('GET','/connect',undefined,currentProvider,'');toast(`${providerLabel()} 已连接，正在自动加载数据`);await loadServers();await autoLoadForPanel('p-servers',true);}catch(e){toast(e.message,false)}};
+$('connect').onclick=async()=>{try{await loadServers();await autoLoadForPanel('p-servers',true);toast(`${providerLabel()} 已刷新数据`);}catch(e){toast(e.message,false)}};
 
 async function loadServers(){try{
 const box=$('servers');box.innerHTML='<div class="muted">正在拉取服务器列表...</div>';
 setSelectedHint('正在拉取服务器，请稍候...');
 let merged=[];
+const pullErrors=[];
 if(loggedInUser){
   const ts=await apiLocal('GET','/auth/tokens');
   const entries=(Array.isArray(ts.data)?ts.data:[]);
   lastTokenEntries = entries;
   renderTokenList(entries);
   for(const t of entries){
-
     try{
       const r=await api('GET','/server?results=200',undefined,t.provider,t.id);
       const arr=Array.isArray(r.data)?r.data:[];
       merged.push(...arr.map(s=>({...s,__provider:t.provider,__tokenId:t.id,__tokenLabel:t.label||'-'})));
-    }catch{}
+    }catch(err){
+      pullErrors.push(`${formatTokenLabel(t.provider,t.label)}: ${err.message||'拉取失败'}`);
+    }
   }
 }else{
   const r=await api('GET','/server?results=200');
   const arr=Array.isArray(r.data)?r.data:[];
   merged=arr.map(s=>({...s,__provider:currentProvider}));
 }
-if(!merged.length){box.innerHTML='<div class="muted">没有服务器</div>';setSelectedHint('当前账号下没有服务器');return}
+if(!merged.length){
+  const errHtml = pullErrors.length ? `<div class='muted' style='margin-top:6px;color:#ffb3b3'>${pullErrors.join('<br>')}</div>` : '';
+  box.innerHTML=`<div class="muted">没有服务器</div>${errHtml}`;
+  setSelectedHint(pullErrors.length ? '拉取失败：请检查 Token 是否有效/到期' : '当前账号下没有服务器');
+  return;
+}
 box.innerHTML='';
 let firstCard=null,first={id:'',name:'',ip:'-',provider:currentProvider};
 merged.forEach((s,idx)=>{const id=s.id,name=s.name||'未命名',cpu=s.cpu||'-',mem=s.memory||'-',ip=s?.network?.primary?.ipv4?.[0]?.address||'-',provider=s.__provider||currentProvider,tokenId=s.__tokenId||'',tokenLabel=s.__tokenLabel||'-';const boot=s.uefi?'UEFI':'BIOS';const disk=(Array.isArray(s.storage)?s.storage.map(x=>x.capacity).join(' + '):'-')||'-';const ipv6Count=Array.isArray(s?.network?.primary?.ipv6)?s.network.primary.ipv6.length:0;const bw=(s?.network?.primary?.limit ?? s?.network?.secondary?.[0]?.limit ?? s?.network?.secondary?.limit);const bwText=(bw===null||bw===undefined||bw==='')?'不限/未知':String(bw);const endRaw=s?.currentMonthlyPeriod?.end||'';const endDate=formatEndDate(endRaw);const tokenText=formatTokenLabel(provider,tokenLabel);const d=document.createElement('div');d.className='item';d.innerHTML=`<div class='title'>${name}</div><div class='muted'>${id}</div><div style='margin:6px 0'><span class='pill'>${tokenText}</span> <span class='pill'>CPU ${cpu}</span> <span class='pill'>内存 ${mem}</span></div><div class='muted'>IPv4: ${ip}</div><div class='muted'>磁盘: ${disk} ｜ 引导: ${boot} ｜ IPv6段: ${ipv6Count}</div><div class='muted'>带宽: ${bwText} ｜ 到期日: ${endDate}</div>`;d.onclick=()=>{document.querySelectorAll('.item').forEach(x=>x.classList.remove('active'));d.classList.add('active');selectServer(id,name,ip,provider,tokenId);};if(idx===0){firstCard=d;first={id,name,ip,provider,tokenId};}box.appendChild(d)});
 if(firstCard){firstCard.classList.add('active');selectServer(first.id,first.name,first.ip,first.provider,first.tokenId);}
-toast(`已加载 ${merged.length} 台服务器（多站点聚合）`);}catch(e){toast(e.message,false)}}
+setSelectedHint(`已加载 ${merged.length} 台服务器（多站点聚合）`);
+toast(`已加载 ${merged.length} 台服务器（多站点聚合）`);}catch(e){
+  setSelectedHint(`拉取失败：${e.message||'unknown error'}`);
+  toast(e.message,false)
+}}
 
 async function loadServerDetail(){const id=needServer();if(!id)return;try{const r=await api('GET',`/server/${id}?state=true`);const d=r.data||{};const st=d.state||{};setSelectedHint(`当前服务器：${d.name||'-'}（${id}）｜状态：${st.running?'运行中':'已停止'} (${st.status||'-'})`);}catch(e){toast(e.message,false)}}
 if($('loadServerDetail')) $('loadServerDetail').onclick=loadServerDetail;
@@ -575,6 +602,7 @@ function renderAuthState(){
     $('authState').textContent = `已登录：${loggedInUser}`;
     $('openLogin').style.display='none';
     $('openRegister').style.display='none';
+    $('openPwd').style.display='inline';
     $('openAdmin').style.display = (loggedInUser==='admin') ? 'inline' : 'none';
     $('logoutBtn').style.display='inline';
     $('saveToken').style.display='inline-block';
@@ -583,6 +611,7 @@ function renderAuthState(){
     $('authState').textContent = '未登录';
     $('openLogin').style.display='inline';
     $('openRegister').style.display='inline';
+    $('openPwd').style.display='none';
     $('openAdmin').style.display='none';
     $('logoutBtn').style.display='none';
     $('saveToken').style.display='none';
@@ -591,6 +620,13 @@ function renderAuthState(){
 }
 $('openLogin').onclick=()=>openAuth('login');
 $('openRegister').onclick=()=>openAuth('register');
+$('openPwd').onclick=()=>{
+  $('oldPwd').value='';
+  $('newPwd').value='';
+  $('pwdErr').style.display='none';
+  $('pwdErr').textContent='';
+  $('pwdModal').classList.add('show');
+};
 $('openAdmin').onclick=async()=>{
   try{
     const s=await apiLocal('GET','/admin/settings');
@@ -603,6 +639,20 @@ $('openAdmin').onclick=async()=>{
 $('closeAdmin').onclick=()=>$('adminModal').classList.remove('show');
 $('adminModal').onclick=(e)=>{ if(e.target.id==='adminModal') $('adminModal').classList.remove('show'); };
 $('saveAdminSettings').onclick=async()=>{ try{ await apiLocal('PUT','/admin/settings',{captchaEnabled:$('captchaEnabled').checked,turnstileSiteKey:$('turnstileSiteKey').value.trim(),turnstileSecret:$('turnstileSecret').value.trim()}); await loadAuthConfig(); $('adminModal').classList.remove('show'); }catch(e){toast(e.message,false)} };
+$('closePwd').onclick=()=>$('pwdModal').classList.remove('show');
+$('pwdModal').onclick=(e)=>{ if(e.target.id==='pwdModal') $('pwdModal').classList.remove('show'); };
+$('submitPwd').onclick=async()=>{
+  try{
+    const oldPassword=$('oldPwd').value;
+    const newPassword=$('newPwd').value;
+    await apiLocal('POST','/auth/change-password',{oldPassword,newPassword});
+    $('pwdModal').classList.remove('show');
+    toast('密码已修改');
+  }catch(e){
+    $('pwdErr').textContent=e.message||'修改失败';
+    $('pwdErr').style.display='block';
+  }
+};
 $('closeAuth').onclick=closeAuth;
 $('authModal').onclick=(e)=>{ if(e.target.id==='authModal') closeAuth(); };
 $('authUser').addEventListener('keydown',(e)=>{ if(e.key==='Enter') $('submitAuth').click(); });
@@ -615,7 +665,7 @@ $('submitAuth').onclick=async()=>{
     const me = await apiLocal('GET','/auth/me');
     csrfToken = me.csrfToken || '';
     loggedInUser=me.username||username; renderAuthState(); await loadTokenForProvider(); closeAuth();
-    try{ await $('connect').onclick(); }catch{}
+    try{ await loadServers(); await autoLoadForPanel('p-servers',true); }catch{}
   }catch(e){ $('authErr').textContent = e.message || '登录失败'; $('authErr').style.display='block'; }
 };
 $('logoutBtn').onclick=async()=>{try{await apiLocal('POST','/auth/logout',{});loggedInUser=null;csrfToken='';renderAuthState();await loadTokenForProvider();$('tokenImportCard').style.display='none';toast('已退出登录');}catch(e){toast(e.message,false)}};
@@ -632,14 +682,31 @@ $('clearAllTokens').onclick=async()=>{
 };
 
 document.addEventListener('click', async(e)=>{
-  const id=e.target?.dataset?.delTokenId;
-  if(!id) return;
-  try{
-    await apiLocal('DELETE',`/auth/tokens/${id}`);
-    await refreshTokenList();
-    await loadServers();
-    toast(`Token 已删除`);
-  }catch(err){toast(err.message,false)}
+  const delId=e.target?.dataset?.delTokenId;
+  if(delId){
+    try{
+      await apiLocal('DELETE',`/auth/tokens/${delId}`);
+      await refreshTokenList();
+      await loadServers();
+      toast(`Token 已删除`);
+    }catch(err){toast(err.message,false)}
+    return;
+  }
+
+  const editId=e.target?.dataset?.editTokenId;
+  if(editId){
+    try{
+      const oldLabel=e.target?.dataset?.editTokenLabel||'';
+      const next=prompt('输入新的 Token 名称', oldLabel);
+      if(next===null) return;
+      const label=String(next).trim();
+      if(!label) return toast('名称不能为空',false);
+      await apiLocal('PATCH',`/auth/tokens/${editId}`,{label});
+      await refreshTokenList();
+      await loadServers();
+      toast('Token 名称已更新');
+    }catch(err){toast(err.message,false)}
+  }
 });
 
 window.addEventListener('load', async()=>{
@@ -649,7 +716,7 @@ window.addEventListener('load', async()=>{
     if(me.loggedIn){ loggedInUser = me.username; csrfToken = me.csrfToken || ''; renderAuthState(); await loadTokenForProvider(); await refreshTokenList(); }
     else { renderAuthState(); }
   }catch{ renderAuthState(); }
-  try { await $('connect').onclick(); } catch {}
+  try { await loadServers(); await autoLoadForPanel('p-servers',true); } catch {}
 });
 </script>
 </body>
