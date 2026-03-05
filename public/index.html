@@ -426,7 +426,13 @@ $('saveToken').onclick=async()=>{try{
 $('connect').onclick=async()=>{try{await loadServers();await autoLoadForPanel('p-servers',true);toast(`${providerLabel()} 已刷新数据`);}catch(e){toast(e.message,false)}};
 
 async function loadServers(){try{
-const box=$('servers');box.innerHTML='<div class="muted">正在拉取服务器列表...</div>';
+const box=$('servers');
+if(!loggedInUser){
+  box.innerHTML='<div class="muted">请先登录后再拉取服务器</div>';
+  setSelectedHint('未登录：请先登录后再拉取服务器');
+  return;
+}
+box.innerHTML='<div class="muted">正在拉取服务器列表...</div>';
 setSelectedHint('正在拉取服务器，请稍候...');
 let merged=[];
 const pullErrors=[];
@@ -461,8 +467,9 @@ merged.forEach((s,idx)=>{const id=s.id,name=s.name||'未命名',cpu=s.cpu||'-',m
 if(firstCard){firstCard.classList.add('active');selectServer(first.id,first.name,first.ip,first.provider,first.tokenId);}
 setSelectedHint(`已加载 ${merged.length} 台服务器（多站点聚合）`);
 toast(`已加载 ${merged.length} 台服务器（多站点聚合）`);}catch(e){
-  setSelectedHint(`拉取失败：${e.message||'unknown error'}`);
-  toast(e.message,false)
+  const msg = (e && /401|unauthorized|未登录/i.test(String(e.message||''))) ? '请先登录后再拉取服务器' : (e.message||'unknown error');
+  setSelectedHint(`拉取失败：${msg}`);
+  toast(msg,false)
 }}
 
 async function loadServerDetail(){const id=needServer();if(!id)return;try{const r=await api('GET',`/server/${id}?state=true`);const d=r.data||{};const st=d.state||{};setSelectedHint(`当前服务器：${d.name||'-'}（${id}）｜状态：${st.running?'运行中':'已停止'} (${st.status||'-'})`);}catch(e){toast(e.message,false)}}

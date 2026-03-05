@@ -23,6 +23,10 @@ const ENC_KEY = process.env.TOKEN_ENC_KEY || '';
 const SESSION_TTL_MS = Number(process.env.SESSION_TTL_MS || 1000 * 60 * 60 * 24 * 30);
 const TURNSTILE_SECRET = process.env.TURNSTILE_SECRET || '';
 const TURNSTILE_SITE_KEY = process.env.TURNSTILE_SITE_KEY || '';
+const PROXY_TIMEOUT_MS = Number(process.env.PROXY_TIMEOUT_MS || 12000);
+const PROXY_CACHE_TTL_MS = Number(process.env.PROXY_CACHE_TTL_MS || 4000);
+const proxyCache = new Map(); // key -> { at, status, ct, body }
+const proxyInflight = new Map(); // key -> Promise<{status,ct,body}>
 if (ENC_KEY && Buffer.from(ENC_KEY).length < 32) {
   console.warn('TOKEN_ENC_KEY is set but too short; use at least 32 bytes');
 }
@@ -349,10 +353,11 @@ app.use('/api/proxy', requireAuth, requireCsrf, async (req, res) => {
     const base = API_BASES[provider] || API_BASES.bitsflow;
     const url = `${base}${targetPath}`;
 
+    const user = authUser(req);
+    const tokenId = (req.headers['x-token-id'] || '').toString();
+
     let authorization = '';
     {
-      const user = authUser(req);
-      const tokenId = (req.headers['x-token-id'] || '').toString();
       const entries = user ? getTokenEntries(user) : [];
       const picked = tokenId ? entries.find(t => t.id === tokenId) : entries.find(t => t.provider === provider);
       if (picked?.token) {
@@ -370,16 +375,65 @@ app.use('/api/proxy', requireAuth, requireCsrf, async (req, res) => {
     Object.keys(headers).forEach((k) => !headers[k] && delete headers[k]);
 
     const method = req.method.toUpperCase();
-    const init = { method, headers };
-    if (!['GET', 'HEAD'].includes(method)) init.body = JSON.stringify(req.body || {});
+    const useCache = method === 'GET';
+    const cacheKey = `${user?.username || '-'}|${provider}|${tokenId || '-'}|${method}|${targetPath}`;
 
-    const r = await fetch(url, init);
-    const text = await r.text();
-    res.status(r.status);
-    const ct = r.headers.get('content-type') || 'application/json; charset=utf-8';
-    res.setHeader('content-type', ct);
-    return res.send(text);
+    if (useCache) {
+      const c = proxyCache.get(cacheKey);
+      if (c && Date.now() - c.at < PROXY_CACHE_TTL_MS) {
+        res.status(c.status);
+        res.setHeader('content-type', c.ct);
+        res.setHeader('x-cache', 'HIT');
+        return res.send(c.body);
+      }
+      const inFlight = proxyInflight.get(cacheKey);
+      if (inFlight) {
+        const out = await inFlight;
+        res.status(out.status);
+        res.setHeader('content-type', out.ct);
+        res.setHeader('x-cache', 'INFLIGHT');
+        return res.send(out.body);
+      }
+    }
+
+    const doFetch = async () => {
+      const init = { method, headers };
+      if (!['GET', 'HEAD'].includes(method)) init.body = JSON.stringify(req.body || {});
+
+      const ctl = new AbortController();
+      const t = setTimeout(() => ctl.abort(), PROXY_TIMEOUT_MS);
+      init.signal = ctl.signal;
+
+      try {
+        const r = await fetch(url, init);
+        const text = await r.text();
+        return {
+          status: r.status,
+          ct: r.headers.get('content-type') || 'application/json; charset=utf-8',
+          body: text,
+        };
+      } finally {
+        clearTimeout(t);
+      }
+    };
+
+    if (useCache) {
+      const p = doFetch().finally(() => proxyInflight.delete(cacheKey));
+      proxyInflight.set(cacheKey, p);
+      const out = await p;
+      proxyCache.set(cacheKey, { ...out, at: Date.now() });
+      res.status(out.status);
+      res.setHeader('content-type', out.ct);
+      res.setHeader('x-cache', 'MISS');
+      return res.send(out.body);
+    }
+
+    const out = await doFetch();
+    res.status(out.status);
+    res.setHeader('content-type', out.ct);
+    return res.send(out.body);
   } catch (e) {
+    if (e?.name === 'AbortError') return res.status(504).json({ error: `proxy_timeout_${PROXY_TIMEOUT_MS}ms` });
     return res.status(502).json({ error: e.message || 'proxy_failed' });
   }
 });
