@@ -105,6 +105,20 @@ PROXY_CACHE_TTL_MS=4000
 
 如果你更习惯 Docker，可以直接使用下面方式：
 
+### 一键启动命令
+
+首次部署可直接执行：
+
+```bash
+git clone https://github.com/Spittingjiu/vpscon.git && cd vpscon && docker compose up -d --build
+```
+
+如果你想强制覆盖本地旧目录再重新部署，可执行：
+
+```bash
+rm -rf vpscon && git clone https://github.com/Spittingjiu/vpscon.git && cd vpscon && docker compose up -d --build
+```
+
 ### 1. 构建并启动
 
 ```bash
