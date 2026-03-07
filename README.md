@@ -100,6 +100,45 @@ PROXY_CACHE_TTL_MS=4000
 - 当 `COOKIE_SECURE=true` 时，请确保你跑在 HTTPS 后面
 - 如果这个面板对公网开放，建议启用登录保护，并视情况启用 Turnstile 验证
 
+
+## Docker 部署
+
+如果你更习惯 Docker，可以直接使用下面方式：
+
+### 1. 构建并启动
+
+```bash
+docker compose up -d --build
+```
+
+### 2. 访问面板
+
+```text
+http://127.0.0.1:3338
+```
+
+### 3. 数据持久化
+
+`docker-compose.yml` 已经将本地 `./data` 挂载到容器内的 `/app/data`，用于保存：
+
+- 用户数据
+- 设置项
+- Token 相关存储
+
+### 4. 生产环境建议
+
+在生产环境中请至少修改这些值：
+
+- `TOKEN_ENC_KEY`
+- `COOKIE_SECURE`
+- 反向代理与 HTTPS 配置
+
+如果你放在 Nginx / Caddy 后面，建议：
+
+- 面板只监听内网或本机
+- 由反向代理处理 HTTPS
+- 对公网访问做额外限制
+
 ## 生产部署建议
 
 一个简单的生产部署组合可以是：

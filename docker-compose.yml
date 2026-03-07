@@ -1,0 +1,21 @@
+version: '3.8'
+services:
+  vpscon:
+    build: .
+    container_name: vpscon
+    restart: unless-stopped
+    ports:
+      - "3338:3338"
+    environment:
+      PORT: 3338
+      BITSFLOW_BASE: https://scp-hk.bitsflow.cloud/api
+      NOSLA_BASE: https://scp.nosla.cloud/api
+      TOKEN_ENC_KEY: change-this-to-a-long-random-secret
+      SESSION_TTL_MS: 2592000000
+      TURNSTILE_SECRET: ""
+      TURNSTILE_SITE_KEY: ""
+      COOKIE_SECURE: "false"
+      PROXY_TIMEOUT_MS: 12000
+      PROXY_CACHE_TTL_MS: 4000
+    volumes:
+      - ./data:/app/data
