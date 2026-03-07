@@ -1,37 +1,194 @@
-# BitsFlow VPS Manager
+# VPSCon
 
-后端代理模式的 VPS 管理页（避免前端直连 API 被 Cloudflare challenge 拦截）。
+A self-hosted multi-provider VPS control panel focused on daily server operations.
 
-## 已完成
-- VPS 列表加载（可自定义列表 API 路径）
-- 单机动作：开机 / 关机 / 重启（可自定义动作路径模板）
-- 支持 `X-API-Key` 或 `Authorization: Bearer ...`
-- 本地保存配置（浏览器 localStorage）
+VPSCon provides a clean web interface for managing VPS instances across different providers from one place. It is designed for personal use, small teams, and operators who want a lightweight dashboard for common infrastructure actions without opening multiple provider panels.
 
-## 运行
+## Features
+
+- Multi-provider VPS management
+- Provider-isolated token storage
+- Server list aggregation across providers
+- Power operations
+  - Boot
+  - Shutdown
+  - Restart
+  - Force power off
+- Rescue mode toggle
+- Password reset
+- VNC information lookup
+- ISO management
+- SSH key management
+- Task list / operation history lookup
+- Server rename
+- Basic login system with optional Turnstile protection
+- Improved operation feedback UX for sensitive actions
+
+## Supported Providers
+
+Current codebase includes support for:
+
+- BitsFlow
+- Nosla
+
+The architecture is simple enough to extend for other providers with similar APIs.
+
+## Screenshots / UI
+
+The UI is a single-page control panel with:
+
+- server list view
+- grouped operation actions
+- provider switching
+- auth panel
+- modal-based quick actions
+- operation status feedback
+
+If you plan to use this as a public-facing admin panel, you should put it behind HTTPS and restrict access carefully.
+
+## Quick Start
+
+### 1. Clone
+
 ```bash
-cd /root/.openclaw/workspace/bitsflow-vps-manager
+git clone https://github.com/Spittingjiu/vpscon.git
+cd vpscon
+```
+
+### 2. Install dependencies
+
+```bash
 npm install
-PORT=3338 BITSFLOW_BASE=https://api.bitsflow.org npm start
 ```
 
-## 一键部署（计划用于 GH 发布）
-> 已记录：下一步会上 GitHub，并提供两条命令给其他人直接用。
+### 3. Start
 
-- 本地直接部署（Node）
 ```bash
-bash -c "git clone <GH_REPO_URL> glvps && cd glvps && npm i --production && cp .env.example .env && npm start"
+npm start
 ```
 
-- Docker 部署
+Default port:
+
+- `3338`
+
+Then open:
+
+- `http://127.0.0.1:3338`
+
+## Environment Variables
+
+You can configure the app with environment variables:
+
 ```bash
-docker run -d --name glvps -p 3338:3338 -v glvps-data:/app/data <GH_IMAGE>:latest
+PORT=3338
+BITSFLOW_BASE=https://scp-hk.bitsflow.cloud/api
+NOSLA_BASE=https://scp.nosla.cloud/api
+TOKEN_ENC_KEY=replace-with-a-long-random-secret
+SESSION_TTL_MS=2592000000
+TURNSTILE_SECRET=
+TURNSTILE_SITE_KEY=
+COOKIE_SECURE=true
+PROXY_TIMEOUT_MS=12000
+PROXY_CACHE_TTL_MS=4000
 ```
 
-## 当前服务
-- 本机地址：`http://127.0.0.1:3338`
-- 健康检查：`/healthz`
+### Important
 
-## 可配置环境变量
-- `PORT`：服务端口（默认 3338）
-- `BITSFLOW_BASE`：BitsFlow API 基地址（默认 `https://api.bitsflow.org`）
+- `TOKEN_ENC_KEY` should be set in production
+- use a strong random value
+- run behind HTTPS when `COOKIE_SECURE=true`
+- if you expose this panel publicly, you should enable authentication and consider Turnstile protection
+
+## Production Deployment
+
+A simple production setup can use:
+
+- Node.js
+- PM2
+- Nginx
+
+### Example with PM2
+
+```bash
+pm2 start server.mjs --name vpscon
+pm2 save
+```
+
+### Example Nginx reverse proxy
+
+```nginx
+server {
+    listen 80;
+    server_name your-domain.example;
+
+    location / {
+        proxy_pass http://127.0.0.1:3338;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+Then add HTTPS with Let's Encrypt or your preferred certificate solution.
+
+## Security Notes
+
+This project can execute sensitive VPS operations.
+
+Before using it in production, you should:
+
+- enable HTTPS
+- set `TOKEN_ENC_KEY`
+- restrict who can access the panel
+- review reverse proxy settings
+- avoid exposing it without authentication
+- rotate provider tokens if a leak is suspected
+
+## Project Structure
+
+```text
+.
+├── public/
+│   └── index.html
+├── data/
+│   ├── settings.json
+│   └── users.json
+├── server.mjs
+├── package.json
+└── README.md
+```
+
+## Intended Use
+
+This project is best suited for:
+
+- personal operations dashboards
+- small internal admin tools
+- multi-provider VPS management
+- rapid self-hosted control panels
+
+It is not yet positioned as a hardened enterprise control plane.
+
+## Roadmap Ideas
+
+Possible future improvements:
+
+- stronger role-based access control
+- richer task status polling
+- action audit log
+- better provider abstraction
+- mobile-first UX improvements
+- more detailed operation result feedback
+- token import/export management
+
+## License
+
+Add the license that matches your intended distribution model.
+If you want public reuse, MIT is usually the simplest option.
+
+---
+
+If you use this project in production, review the code and security model carefully before exposing it to the internet.
