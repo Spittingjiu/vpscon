@@ -47,6 +47,44 @@ VPSCon 提供一个统一的 Web 控制台，用来集中管理不同厂商的 V
 
 如果你打算把它部署成公网管理面板，请务必开启 HTTPS，并做好访问控制。
 
+## Token 获取方式
+
+如果你要接入 VPS 厂商账号，需要先在对应厂商后台生成 API Token。
+
+### BitsFlow
+
+打开：
+
+- `https://ccp.bitsflow.cloud/client/login/`
+
+登录你自己的账号后：
+
+1. 在任意一台 VPS 后面点击 `Manage`
+2. 进入后，在左上角点击 `Manage`
+3. 再点击 `Manage my Server`
+4. 点击右上角自己的头像
+5. 进入 `账户`
+6. 选择 `应用程序接口`
+7. 生成令牌（API Token）
+
+### Nosla
+
+打开：
+
+- `https://ccp.nosla.cloud/client/login/`
+
+登录你自己的账号后：
+
+1. 在任意一台 VPS 后面点击 `Manage`
+2. 进入后，在左上角点击 `Manage`
+3. 再点击 `Manage my Server`
+4. 点击右上角自己的头像
+5. 进入 `账户`
+6. 选择 `应用程序接口`
+7. 生成令牌（API Token）
+
+生成后，把 Token 粘贴到 VPSCon 面板中对应厂商的位置即可。
+
 ## 快速开始
 
 ### 1. 克隆项目
