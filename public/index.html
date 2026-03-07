@@ -20,6 +20,9 @@
     .pill{display:inline-block;padding:2px 8px;border-radius:999px;background:#1e2f61;font-size:12px}
     table{width:100%;border-collapse:collapse}th,td{border-bottom:1px solid #243056;padding:8px;text-align:left;font-size:13px}
     .toast{position:fixed;right:16px;bottom:16px;background:#13204a;border:1px solid #2f4ea1;padding:10px 12px;border-radius:10px;max-width:450px;z-index:9}
+    .toast.ok{border-color:#2c9b66;background:#11291f}.toast.err{border-color:#a13b3b;background:#2a1317}.toast.warn{border-color:#b0841f;background:#2b2410}
+    .busy{opacity:.65;pointer-events:none;position:relative}
+    .busy::after{content:'处理中...';position:absolute;inset:0;display:grid;place-items:center;background:rgba(8,12,24,.42);border-radius:10px;font-size:12px;color:#dce7ff}
     .oktxt{color:#87efb8}.errtxt{color:#ff9b9b}
     .auth-mini{display:flex;gap:8px;align-items:center;justify-content:flex-end;flex-wrap:nowrap;white-space:nowrap}
     .auth-chip{padding:4px 10px;border:1px solid var(--line);border-radius:999px;background:#111d44;color:#c7d5ff;font-size:12px}
@@ -263,7 +266,29 @@
 <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
 <script>
 const $=id=>document.getElementById(id);
-const toast=()=>{};
+function toast(msg, ok=true, kind='ok'){
+  const el=$('toast');
+  el.textContent=msg;
+  el.className=`toast ${kind || (ok ? 'ok' : 'err')}`;
+  el.style.display='block';
+  clearTimeout(window.__toastTimer);
+  window.__toastTimer=setTimeout(()=>{el.style.display='none';},3500);
+}
+
+async function runAction(btn, fn, pending='处理中...', success='操作已提交'){
+  if(btn){ btn.disabled=true; btn.classList.add('busy'); }
+  toast(pending,true,'warn');
+  try{
+    const result = await fn();
+    toast(success,true,'ok');
+    return result;
+  }catch(e){
+    toast(e.message||'操作失败',false,'err');
+    throw e;
+  }finally{
+    if(btn){ btn.disabled=false; btn.classList.remove('busy'); }
+  }
+}
 let currentProvider = localStorage.getItem('bf_provider') || 'bitsflow';
 let currentServerProvider = '';
 let currentTokenId = '';
@@ -477,10 +502,13 @@ if($('loadServerDetail')) $('loadServerDetail').onclick=loadServerDetail;
 
 $('renameServer').onclick=async()=>{const id=needServer();if(!id)return;const name=$('newName').value.trim();if(!name)return toast('请输入新名称',false);try{await api('PUT',`/server/${id}/name`,{name});toast('服务器名称已修改');$('newName').value='';}catch(e){toast(e.message,false)}};
 
-[...document.querySelectorAll('.powerBtn')].forEach(b=>b.onclick=async()=>{const id=needServer();if(!id)return;try{await api('POST',`/server/${id}/${b.dataset.power}`);toast(`已提交：${b.textContent}`);}catch(e){toast(e.message,false)}});
+[...document.querySelectorAll('.powerBtn')].forEach(b=>b.onclick=async()=>{
+  const id=needServer();if(!id)return;
+  await runAction(b, async()=>api('POST',`/server/${id}/${b.dataset.power}`), `正在执行：${b.textContent}`, `已提交：${b.textContent}`);
+});
 async function refreshState(){const id=needServer();if(!id)return;try{const r=await api('GET',`/server/${id}?state=true`);const s=r?.data?.state||{};$('stateBox').innerHTML=`当前状态：<b>${s.running?'运行中':'已停止'}</b>（${s.status||'-'}），CPU：${s.cpu||'-'}`;toast('状态已刷新');}catch(e){toast(e.message,false)}}
-$('toggleRescue').onclick=async()=>{const id=needServer();if(!id)return;try{await api('POST',`/server/${id}/rescue`);toast('救援模式切换请求已提交');}catch(e){toast(e.message,false)}};
-$('resetPassword').onclick=async()=>{const id=needServer();if(!id)return;try{const r=await api('POST',`/server/${id}/resetPassword`);const pwd=r?.data?.expectedPassword;toast(pwd?`新密码：${pwd}`:'重置密码请求已提交');}catch(e){toast(e.message,false)}};
+$('toggleRescue').onclick=async(e)=>{const id=needServer();if(!id)return;await runAction(e.currentTarget, async()=>api('POST',`/server/${id}/rescue`), '正在切换救援模式...', '救援模式切换请求已提交');};
+$('resetPassword').onclick=async(e)=>{const id=needServer();if(!id)return;await runAction(e.currentTarget, async()=>{const r=await api('POST',`/server/${id}/resetPassword`);const pwd=r?.data?.expectedPassword;toast(pwd?`新密码：${pwd}`:'重置密码请求已提交',true,'ok');return r;}, '正在重置系统密码...', '重置密码请求已提交');};
 
 $('saveSettings').onclick=async()=>{const id=needServer();if(!id)return;try{await api('PUT',`/server/${id}/settings`,{bootType:$('bootType').value,autoConfiguration:$('autoCfg').value==='true'});toast('系统设置已保存');}catch(e){toast(e.message,false)}};
 $('setBootOrder').onclick=async()=>{const id=needServer();if(!id)return;try{await api('POST',`/server/${id}/bootOrder`,{order:$('bootOrder').value});toast('启动顺序已提交');}catch(e){toast(e.message,false)}};
