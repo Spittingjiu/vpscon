@@ -241,11 +241,13 @@ server {
 
 ## Cloudflare Turnstile 说明
 
-如果当前登录用户名是 `admin`，那么你可以在面板里的“安全设置”中：
+只有管理员用户可以在面板里的“安全设置”中：
 
 - 开启 Cloudflare Turnstile
 - 配置 Turnstile Site Key
 - 配置 Turnstile Secret
+
+> 权限规则：系统不会内置默认账号；首次注册用户会自动成为管理员，后续注册用户默认为普通用户。
 
 开启后，登录和注册流程可以增加额外的人机验证保护。
 

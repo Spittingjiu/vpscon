@@ -34,11 +34,35 @@ if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
 if (!fs.existsSync(usersFile)) fs.writeFileSync(usersFile, JSON.stringify({ users: [] }, null, 2), { mode: 0o600 });
 if (!fs.existsSync(settingsFile)) fs.writeFileSync(settingsFile, JSON.stringify({ captchaEnabled: false, turnstileSiteKey: '', turnstileSecret: '' }, null, 2), { mode: 0o600 });
 
+function normalizeUserRecord(u, idx, total) {
+  const username = String(u?.username || '').trim().toLowerCase();
+  const passwordHash = String(u?.passwordHash || '');
+  const role = (u?.role === 'admin' || u?.role === 'user')
+    ? u.role
+    : (username === 'admin' || (idx === 0 && total > 0) ? 'admin' : 'user');
+  return {
+    username,
+    passwordHash,
+    role,
+    tokenEntries: Array.isArray(u?.tokenEntries) ? u.tokenEntries : []
+  };
+}
+
 function readUsers() {
-  try { return JSON.parse(fs.readFileSync(usersFile, 'utf8')); } catch { return { users: [] }; }
+  try {
+    const raw = JSON.parse(fs.readFileSync(usersFile, 'utf8'));
+    const list = Array.isArray(raw?.users) ? raw.users : [];
+    const users = list.map((u, idx) => normalizeUserRecord(u, idx, list.length));
+    const changed = JSON.stringify(users) !== JSON.stringify(list);
+    const out = { users };
+    if (changed) writeUsers(out);
+    return out;
+  } catch {
+    return { users: [] };
+  }
 }
 function writeUsers(db) {
-  fs.writeFileSync(usersFile, JSON.stringify(db, null, 2));
+  fs.writeFileSync(usersFile, JSON.stringify(db, null, 2), { mode: 0o600 });
 }
 function readSettings() {
   try {
@@ -140,8 +164,12 @@ function requireAuth(req, res, next) {
   req.user = user;
   next();
 }
+function isAdminUser(user) {
+  return user?.role === 'admin';
+}
+
 function requireAdmin(req, res, next) {
-  if (req.user?.username !== 'admin') return res.status(403).json({ error: 'admin_only' });
+  if (!isAdminUser(req.user)) return res.status(403).json({ error: 'admin_only' });
   next();
 }
 function requireSameOrigin(req, res, next) {
@@ -194,9 +222,10 @@ app.post('/auth/register', async (req, res) => {
   }
   const db = readUsers();
   if (db.users.some(u => u.username === username)) return res.status(409).json({ error: 'user exists' });
-  db.users.push({ username, passwordHash: pbkdf(password), tokenEntries: [] });
+  const role = db.users.length === 0 ? 'admin' : 'user';
+  db.users.push({ username, passwordHash: pbkdf(password), role, tokenEntries: [] });
   writeUsers(db);
-  return res.json({ ok: true });
+  return res.json({ ok: true, role });
 });
 
 app.post('/auth/login', async (req, res) => {
@@ -255,7 +284,7 @@ app.get('/auth/config', (req, res) => {
   return res.json({
     captchaEnabled: !!settings.captchaEnabled,
     turnstileSiteKey: settings.turnstileSiteKey || TURNSTILE_SITE_KEY || '',
-    isAdmin: user?.username === 'admin'
+    isAdmin: isAdminUser(user)
   });
 });
 

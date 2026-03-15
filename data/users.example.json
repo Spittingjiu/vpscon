@@ -1,9 +1,3 @@
 {
-  "users": [
-    {
-      "username": "admin",
-      "passwordHash": "<generated-on-first-run>",
-      "tokenEntries": []
-    }
-  ]
+  "users": []
 }
