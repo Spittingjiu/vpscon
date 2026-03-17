@@ -387,6 +387,18 @@ function formatTokenLabel(provider,label){
     .replace(/^nosla/i,'Nosla');
 }
 function providerLabel(){ return providerLabelOf(currentProvider); }
+
+function validateInstanceName(name){
+  const n = String(name||'').trim();
+  if(!n) return '请输入新名称';
+  if(n.length < 1 || n.length > 63) return '实例名长度需为 1-63 个字符';
+  // 兼容常见云厂商规则：仅英文/数字/.-_，且必须字母或数字开头
+  if(!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(n)){
+    return '实例名仅支持英文、数字、点(.)、中划线(-)、下划线(_)，且需以英文或数字开头';
+  }
+  return '';
+}
+
 function selectServer(id,name,ip='-',provider=currentProvider,tokenId=''){
   currentServerProvider=provider;
   currentTokenId=tokenId||'';
@@ -500,7 +512,7 @@ toast(`已加载 ${merged.length} 台服务器（多站点聚合）`);}catch(e){
 async function loadServerDetail(){const id=needServer();if(!id)return;try{const r=await api('GET',`/server/${id}?state=true`);const d=r.data||{};const st=d.state||{};setSelectedHint(`当前服务器：${d.name||'-'}（${id}）｜状态：${st.running?'运行中':'已停止'} (${st.status||'-'})`);}catch(e){toast(e.message,false)}}
 if($('loadServerDetail')) $('loadServerDetail').onclick=loadServerDetail;
 
-$('renameServer').onclick=async()=>{const id=needServer();if(!id)return;const name=$('newName').value.trim();if(!name)return toast('请输入新名称',false);try{await api('PUT',`/server/${id}/name`,{name});toast('服务器名称已修改');$('newName').value='';}catch(e){toast(e.message,false)}};
+$('renameServer').onclick=async()=>{const id=needServer();if(!id)return;const name=$('newName').value.trim();const err=validateInstanceName(name);if(err)return toast(err,false);try{await api('PUT',`/server/${id}/name`,{name});toast('服务器名称已修改');$('newName').value='';}catch(e){const msg=(e.message||'').includes('The supplied name body parameter is invalid')?'名称不符合上游平台规则，请使用英文/数字/.-_ 且长度 1-63':'修改失败：'+(e.message||'unknown');toast(msg,false)}};
 
 [...document.querySelectorAll('.powerBtn')].forEach(b=>b.onclick=async()=>{
   const id=needServer();if(!id)return;
